@@ -1,6 +1,6 @@
 include ../makefile.inc
 
-CFLAGS += -iquote ../
+CFLAGS +=  -iquote ../ # -Wno-error=infinite-recursion needed when building on rpi
 ASFLAGS += -I ../
 ULIB = ulib.o usys.o printf.o umalloc.o
 
@@ -19,9 +19,10 @@ UPROGS=\
 	_rm\
 	_sh\
 	_stressfs\
-	_usertests\
 	_wc\
 	_zombie\
+
+	#_usertests
 
 
 all: $(FS_IMAGE)

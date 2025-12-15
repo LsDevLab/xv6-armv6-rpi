@@ -4,7 +4,7 @@ QEMU = qemu-system-arm
 include makefile.inc
 
 # link the libgcc.a for __aeabi_idiv. ARM has no native support for div
-LIBS = $(LIBGCC) libcsud.a
+LIBS = $(LIBGCC) # libcsud.a
 
 OBJS = \
 	bio.o\
@@ -14,7 +14,7 @@ OBJS = \
 	file.o\
 	fs.o\
         kalloc.o\
-        keyboard.o\
+        #keyboard.o\
 	log.o\
 	mailbox.o\
 	main.o\
@@ -34,8 +34,13 @@ OBJS = \
 	vm.o \
 
 #device/picirq.o \
-	
-KERN_OBJS = $(OBJS) entry.o
+
+KERNEL_SRC = bio.c console.c exception.c exec.c file.c fs.c kalloc.c \
+             log.c mailbox.c main.c memide.c mmu.c pipe.c \
+             proc.c spinlock.c string.c syscall.c sysfile.c sysproc.c \
+             timer.c trap.c uart.c wrapper.c vm.c
+
+KERN_OBJS = $(patsubst %.c,%.o,$(KERNEL_SRC)) entry.o
 
 kernel.elf: $(addprefix build/,$(KERN_OBJS)) kernel.ld build/initcode build/fs.img
 	cp -f build/initcode initcode

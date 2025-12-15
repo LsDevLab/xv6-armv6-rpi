@@ -22,6 +22,7 @@ struct {
 } ptable;
 
 static struct proc *initproc;
+struct cpu cpus[NCPU];
 
 int first_sched = 1;
 int nextpid = 1;

@@ -59,7 +59,7 @@ int cmain( uint r0)
   uartinit();
   dsb_barrier();
   consoleinit();
-  cprintf("\nHello World from xv6\n");
+  cprintf("\nlsxv6 by LS - 2025\n");
   kinit1(end, P2V(8*1024*1024));  // reserve 8 pages for PGDIR
   kpgdir=p2v(K_PDX_BASE);
 
@@ -69,7 +69,7 @@ int cmain( uint r0)
   readmailbox(8);
   if(mailbuffer[1] != 0x80000000) 
     cprintf("new error readmailbox\n");
-  else 
+  else
     cprintf("ARM memory is %x %x\n", mailbuffer[MB_HEADER_LENGTH + TAG_HEADER_LENGTH], mailbuffer[MB_HEADER_LENGTH + TAG_HEADER_LENGTH+1]);
 
   pinit();

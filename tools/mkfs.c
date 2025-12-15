@@ -11,7 +11,9 @@
 #include "stat.h"
 #include "param.h"
 
+#ifndef static_assert
 #define static_assert(a, b) do { switch (0) case 0: case (a): ; } while (0)
+#endif 
 
 int nblocks = 985;
 int nlog = LOGSIZE;
@@ -139,6 +141,8 @@ main(int argc, char *argv[])
     strncpy(de.name, argv[i], DIRSIZ);
     iappend(rootino, &de, sizeof(de));
 
+    printf("%s", de.name);
+
     while((cc = read(fd, buf, sizeof(buf))) > 0)
       iappend(inum, buf, cc);
 
@@ -263,6 +267,7 @@ iappend(uint inum, void *xp, int n)
   off = xint(din.size);
   while(n > 0){
     fbn = off / 512;
+    printf("fbn %d MAXFILE %lu\n", fbn, MAXFILE);
     assert(fbn < MAXFILE);
     if(fbn < NDIRECT){
       if(xint(din.addrs[fbn]) == 0){

@@ -9,7 +9,7 @@ OBJCOPY = $(CROSSCOMPILE)objcopy
 OBJDUMP = $(CROSSCOMPILE)objdump
 
 #CFLAGS = -march=armv7-a -mtune=cortex-a15 -fno-pic -static -fno-builtin -fno-strict-aliasing -Wall -Werror -I. -g 
-CFLAGS = -fno-pic -static -Wno-packed-bitfield-compat -fno-builtin -fno-strict-aliasing -fshort-wchar -O2 -Wall -MD -ggdb -Werror -fno-omit-frame-pointer -fno-stack-protector -Wa,-march=armv6 -Wa,-mcpu=arm1176jzf-s
+CFLAGS = -fno-pic -static -Wno-packed-bitfield-compat -fno-builtin -fno-strict-aliasing -fshort-wchar -O2 -Wall -MD -ggdb -Werror -fno-omit-frame-pointer -fno-stack-protector -Wa,-march=armv6 -Wa,-mcpu=arm1176jzf-s # -Wno-error=infinite-recursion needed when building on rpi
 LDFLAGS = -L.
 ASFLAGS = -march=armv6 
 

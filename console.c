@@ -128,54 +128,53 @@ uint tv;
 }
 
 //static void
-void
-gpuputc(uint c)
-{
-    if(c=='\n'){
-	cursor_x = 0;
-	cursor_y += fontheight;
-	if(cursor_y >= frameheight) {
-		memmove((u8 *)fbinfo.fbp, (u8 *)fbinfo.fbp+framewidth*fontheight*2, (frameheight - fontheight)*framewidth*2);
-		cursor_y = frameheight - fontheight;
-		setgpucolour(0);
-		while(cursor_x < framewidth) {
-		    drawcursor(cursor_x, cursor_y);
-		    cursor_x = cursor_x + fontwidth;
-		}
-		setgpucolour(0xffff);
-		cursor_x = 0;
-	}
-    } else if(c == BACKSPACE) {
-	if (cursor_x > 0) {
-		cursor_x -= fontwidth;
-		setgpucolour(0);
-		drawcursor(cursor_x, cursor_y);
-		setgpucolour(0xffff);
-	}
-    } else {
-	setgpucolour(0);
-	drawcursor(cursor_x, cursor_y);
-	setgpucolour(0xffff);
-	if(c!=' ') drawcharacter(c, cursor_x, cursor_y);
-	cursor_x = cursor_x + fontwidth;
-	if(cursor_x >= framewidth) {
-	    cursor_x = 0;
-	    cursor_y += fontheight;
-	    if(cursor_y >= frameheight) {
-		memmove((u8 *)fbinfo.fbp, (u8 *)fbinfo.fbp+framewidth*fontheight*2, (frameheight - fontheight)*framewidth*2);
-		cursor_y = frameheight - fontheight;
-		setgpucolour(0);
-		while(cursor_x < framewidth) {
-		    drawcursor(cursor_x, cursor_y);
-		    cursor_x = cursor_x + fontwidth;
-		}
-		setgpucolour(0xffff);
-		cursor_x = 0;
-	    }
-	}
+// introduced visual backspaces (so that drawcursor() is no more needed)
+void gpuputc(uint c) {
+  if(c == '\n') {
+    cursor_x = 0;
+    cursor_y += fontheight;
+    if(cursor_y >= frameheight) {
+      memmove((u8 *)fbinfo.fbp,
+              (u8 *)fbinfo.fbp + framewidth*fontheight*2,
+              (frameheight - fontheight)*framewidth*2);
+      // Clear the last line (set to background)
+      u8 *last_line = (u8 *)fbinfo.fbp + (frameheight - fontheight)*framewidth*2;
+      memset(last_line, 0, framewidth*fontheight*2); // 0 = black
+      cursor_y = frameheight - fontheight;
     }
+  }
+  else if(c == BACKSPACE) {
+    if(cursor_x >= fontwidth) {
+      cursor_x -= fontwidth;
+      // erase previous character
+      setgpucolour(0);  // black
+      for(uint row = 0; row < fontheight; row++)
+        for(uint col = 0; col < fontwidth; col++)
+          drawpixel(cursor_x + col, cursor_y + row);
+      setgpucolour(0xffff); // restore drawing color
+    }
+  }
+  else {
+    if(c != ' ')
+      drawcharacter(c, cursor_x, cursor_y);
+    cursor_x += fontwidth;
+    if(cursor_x >= framewidth) {
+      cursor_x = 0;
+      cursor_y += fontheight;
+      if(cursor_y >= frameheight) {
+        memmove((u8 *)fbinfo.fbp,
+                (u8 *)fbinfo.fbp + framewidth*fontheight*2,
+                (frameheight - fontheight)*framewidth*2);
+        // Clear the new bottom line
+        u8 *last_line = (u8 *)fbinfo.fbp + (frameheight - fontheight)*framewidth*2;
+        memset(last_line, 0, framewidth*fontheight*2);  // 0 = black background
 
+        cursor_y = frameheight - fontheight;
+      }
+    }
+  }
 }
+
 
 
 static void
@@ -297,8 +296,7 @@ consputc(int c)
   }
 
   if(c == BACKSPACE){
-    gpuputc('\b'); gpuputc(' '); gpuputc('\b');
-    uartputc('\b'); uartputc(' '); uartputc('\b');
+    gpuputc(BACKSPACE);
   } else if(c == C('D')) {
     gpuputc('^'); gpuputc('D');
     uartputc('^'); uartputc('D');
