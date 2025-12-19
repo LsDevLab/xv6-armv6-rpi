@@ -16,7 +16,7 @@ void cprintf(char*, ...);
 void SetGpio(u32, u32);
 void SetGpioFunction(u32, u32);
 void Wait(u32);
-void consoleinit(void);
+// void consoleinit(void);
 void uart_init(void);
 void mmuinit1(void);
 void barriers(void);
@@ -199,6 +199,7 @@ pde_t*          copyuvm(pde_t*, uint);
 void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
+int             copyin(pde_t *, void *, uint, uint );
 void            clearpteu(pde_t *pgdir, char *uva);
 
 
@@ -206,3 +207,12 @@ void            clearpteu(pde_t *pgdir, char *uva);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 
+typedef struct {
+  uint x;
+  uint y;
+  u16 color;
+  char ch;
+  uint w;        // width (for rectangle)
+  uint h;        // height (for rectangle)
+
+} fb_pixel_t;

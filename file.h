@@ -36,3 +36,6 @@ struct devsw {
 extern struct devsw devsw[];
 
 #define CONSOLE 1
+#define UART_KEYBOARD 2
+#define FRAMEBUFFER 3
+

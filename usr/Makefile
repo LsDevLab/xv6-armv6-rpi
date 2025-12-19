@@ -21,6 +21,7 @@ UPROGS=\
 	_stressfs\
 	_wc\
 	_zombie\
+	_wm\
 
 	#_usertests
 

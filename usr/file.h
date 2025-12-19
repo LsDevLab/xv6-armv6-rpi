@@ -1,3 +1,5 @@
+#include "fs.h"
+
 struct file {
   enum { FD_NONE, FD_PIPE, FD_INODE } type;
   int ref; // reference count
@@ -36,3 +38,5 @@ struct devsw {
 extern struct devsw devsw[];
 
 #define CONSOLE 1
+#define UART_KEYBOARD 2
+#define FRAMEBUFFER 3

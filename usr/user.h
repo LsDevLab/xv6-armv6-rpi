@@ -36,3 +36,13 @@ void* memset(void*, int, uint);
 void* malloc(uint);
 void free(void*);
 int atoi(const char*);
+
+typedef struct {
+  uint x;
+  uint y;
+  u16 color;
+  char ch;
+  uint w;        // width (for rectangle)
+  uint h;        // height (for rectangle)
+
+} fb_pixel_t;

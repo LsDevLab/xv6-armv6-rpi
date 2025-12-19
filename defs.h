@@ -28,13 +28,33 @@ void            brelse(struct buf*);
 void            bwrite(struct buf*);
 
 // console.c
-void            consoleinit(void);
-void            cprintf(char*, ...);
-void            consoleintr(int(*)(void));
-void            panic(char*) __attribute__((noreturn));
-void		drawcharacter(u8, uint, uint);
-void		gpuputc(uint);
+// void            consoleinit(void);
+// void            cprintf(char*, ...);
+// void            consoleintr(int(*)(void));
+// void            panic(char*) __attribute__((noreturn));
+// void			gpuputc(uint);
+// void			gpuputcolored(uint, u16);
 
+
+
+// uart_keyboard.c
+void uartkbdintr(int (*getc)(void));
+int uartkbdread(struct inode *ip, char *dst, int n);
+void uartkbdinit(void);
+
+// framebuffer.c
+void		framebufferinit(void);
+void		drawcharacter(u8, uint, uint);
+void 		setgpucolour(u16);
+void 		drawpixel(uint, uint);
+void 		drawcursor(uint, uint);
+void 		fb_scroll_text_region(uint, uint, uint, u16);
+void    cprintf(char*, ...);
+void    panic(char*) __attribute__((noreturn));
+void		gpuputc(uint);
+void		gpuputcolored(uint, u16);
+void    fb_fillrect(int , int, int , int , u16 );
+void    framebuffer_init(void);
 
 // fs.c
 void            readsb(int dev, struct superblock *sb);
@@ -216,6 +236,7 @@ pde_t*          copyuvm(pde_t*, uint);
 void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
+int             copyin(pde_t *, void *, uint, uint );
 void            clearpteu(pde_t *pgdir, char *uva);
 
 // mailbox.c
@@ -229,3 +250,12 @@ void mailboxinit(void);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 
+typedef struct {
+  uint x;
+  uint y;
+  u16 color;
+  char ch;
+  uint w;        // width (for rectangle)
+  uint h;        // height (for rectangle)
+
+} fb_pixel_t;

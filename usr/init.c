@@ -1,20 +1,24 @@
 // init: The initial user-level program
-
 #include "types.h"
 #include "stat.h"
 #include "user.h"
 #include "fcntl.h"
+#include "file.h"
 
-char *argv[] = { "sh", 0 };
+char *argv[] = { "wm", 0 };
 
 int
 main(void)
 {
   int pid, wpid;
 
-  if(open("console", O_RDWR) < 0){
-    mknod("console", 1, 1);
-    open("console", O_RDWR);
+  if(open("/dev/uart_keyboard", O_RDONLY) < 0){
+    mknod("/dev/uart_keyboard", UART_KEYBOARD, 0);
+    open("/dev/uart_keyboard", O_RDONLY);
+  }
+  if(open("/dev/fb", O_RDWR) < 0){
+    mknod("/dev/fb", FRAMEBUFFER, 0);
+    open("/dev/fb", O_RDWR);
   }
   dup(0);  // stdout
   dup(0);  // stderr
@@ -27,7 +31,7 @@ main(void)
       exit();
     }
     if(pid == 0){
-      exec("sh", argv);
+      exec("wm", argv);
       printf(1, "init: exec sh failed\n");
       exit();
     }

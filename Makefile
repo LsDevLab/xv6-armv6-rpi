@@ -38,7 +38,7 @@ OBJS = \
 KERNEL_SRC = bio.c console.c exception.c exec.c file.c fs.c kalloc.c \
              log.c mailbox.c main.c memide.c mmu.c pipe.c \
              proc.c spinlock.c string.c syscall.c sysfile.c sysproc.c \
-             timer.c trap.c uart.c wrapper.c vm.c
+             timer.c trap.c uart.c wrapper.c vm.c framebuffer.c uart_keyboard.c
 
 KERN_OBJS = $(patsubst %.c,%.o,$(KERNEL_SRC)) entry.o
 

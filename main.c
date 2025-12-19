@@ -50,6 +50,44 @@ void machinit(void)
 
 void enableirqminiuart(void);
 
+const char *lsxv6_art[] = {
+  "                                     ",
+  "              X     X          6666  ",
+  "               X   X  V     V 6      ",
+  "L       SSSS    X X   V     V 6      ",
+  "L      S         X    V     V  66666 ",
+  "L       SSSS    X X    V   V  6     6",
+  "L           S  X   X    V V   6     6",
+  "LLLLLL  SSSS  X     X    V     66666 ",
+  "                                     "
+  };
+
+u16 get_letter_color(char c) {
+  switch(c) {
+    case 'L': case 'S':
+        return 0xFFE0; // yellow
+    case 'X': case 'V':
+        return 0x001F; // blue
+    case '6':
+      return 0xF800; // red
+    default:
+      return 0x0000; // black (space or other)
+  }
+}
+
+void draw_logo_colored() {
+
+  int lines = 9;
+  for (int i = 0; i < lines; i++) {
+    const char *line = lsxv6_art[i];
+    for (int j = 0; line[j] != '\0'; j++) {
+      char c = line[j];
+      u16 color = get_letter_color(c);
+      gpuputcolored(c, color); // automatically moves cursor
+    }
+    gpuputc('\n');
+  }
+ }
 
 int cmain( uint r0)
 {
@@ -58,8 +96,9 @@ int cmain( uint r0)
   machinit();
   uartinit();
   dsb_barrier();
-  consoleinit();
-  cprintf("\nlsxv6 by LS - 2025\n");
+  framebufferinit(); // init graphics framebuffer
+  uartkbdinit();
+  draw_logo_colored();
   kinit1(end, P2V(8*1024*1024));  // reserve 8 pages for PGDIR
   kpgdir=p2v(K_PDX_BASE);
 
@@ -86,7 +125,7 @@ int cmain( uint r0)
   timer3init();
   kinit2(P2V(8*1024*1024), P2V(PHYSTOP));
 //cprintf("it is ok after kinit2\n");
-  userinit();
+  // userinit();
 //cprintf("it is ok after userinit\n");
   scheduler();
 
@@ -95,3 +134,5 @@ int cmain( uint r0)
 
   return 0;
 }
+
+

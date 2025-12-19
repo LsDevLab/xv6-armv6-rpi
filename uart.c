@@ -112,7 +112,7 @@ enableirqminiuart(void)
 void
 miniuartintr(void)
 {
-  consoleintr(uartgetc);
+  uartkbdintr(uartgetc);
 }
 
 void ___puts(const char *s)
