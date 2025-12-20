@@ -212,7 +212,7 @@ typedef struct {
   uint y;
   u16 color;
   char ch;
-  uint w;        // width (for rectangle)
-  uint h;        // height (for rectangle)
-
+  uint w;
+  uint h;
+  u16 *buffer;     // user-space pointer (nullable)
 } fb_pixel_t;

@@ -28,6 +28,12 @@ UPROGS=\
 
 all: $(FS_IMAGE)
 
+_wm: wm.o wrapper.o $(ULIB)
+	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ wm.o wrapper.o $(ULIB) -L ../ $(LIBGCC)
+	$(OBJDUMP) -S $@ > wm.asm
+	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > wm.sym
+
+
 _%: %.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^  -L ../ $(LIBGCC)
 	$(OBJDUMP) -S $@ > $*.asm

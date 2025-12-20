@@ -316,19 +316,46 @@ fbwrite(struct inode *ip, char *userbuf, int n)
     while(n >= sizeof(fb_pixel_t)) {
         fb_pixel_t pix;
 
-        // copy one pixel/char struct from user space
-        if(copyin(curr_proc->pgdir, (char*)&pix, (uint)userbuf + off, sizeof(fb_pixel_t)) < 0) {
+        if(copyin(curr_proc->pgdir,
+                  (char*)&pix,
+                  (uint)userbuf + off,
+                  sizeof(fb_pixel_t)) < 0) {
             release(&cons.lock);
             return -1;
-        }
+                  }
 
-        if(pix.x < fbinfo.width && pix.y < fbinfo.height) {
+        // ---- NEW PART STARTS HERE ----
+        if(pix.buffer && pix.w && pix.h) {
+            for(uint yy = 0; yy < pix.h; yy++){
+                for(uint xx = 0; xx < pix.w; xx++){
+                    uint dx = pix.x + xx;
+                    uint dy = pix.y + yy;
+
+                    if(dx >= fbinfo.width || dy >= fbinfo.height)
+                        continue;
+
+                    u16 col;
+                    uint boff = (yy * pix.w + xx) * sizeof(u16);
+
+                    if(copyin(curr_proc->pgdir,
+                              (char*)&col,
+                              (uint)pix.buffer + boff,
+                              sizeof(u16)) < 0) {
+                        release(&cons.lock);
+                        return -1;
+                              }
+
+                    setgpucolour(col);
+                    drawpixel(dx, dy);
+                }
+            }
+        }
+        // ---- EXISTING BEHAVIOR ----
+        else if(pix.x < fbinfo.width && pix.y < fbinfo.height) {
             if(pix.ch) {
-                // draw character using font bitmap
                 setgpucolour(pix.color);
                 drawcharacter((u8)pix.ch, pix.x, pix.y);
             } else {
-                // draw single pixel
                 setgpucolour(pix.color);
                 drawpixel(pix.x, pix.y);
             }
