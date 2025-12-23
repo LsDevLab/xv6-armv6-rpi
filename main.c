@@ -113,20 +113,20 @@ int cmain( uint r0)
 
   pinit();
   tvinit();
-  //cprintf("it is ok after tvinit\n");
+  cprintf("it is ok after tvinit\n");
   binit();
-//cprintf("it is ok after binit\n");
+cprintf("it is ok after binit\n");
   fileinit();
-//cprintf("it is ok after fileinit\n");
+cprintf("it is ok after fileinit\n");
   iinit();
-//cprintf("it is ok after iinit\n");
+cprintf("it is ok after iinit\n");
   ideinit();
-//cprintf("it is ok after ideinit\n");
+cprintf("it is ok after ideinit\n");
   timer3init();
   kinit2(P2V(8*1024*1024), P2V(PHYSTOP));
-//cprintf("it is ok after kinit2\n");
-  // userinit();
-//cprintf("it is ok after userinit\n");
+cprintf("it is ok after kinit2\n");
+  userinit();
+cprintf("it is ok after userinit\n");
   scheduler();
 
 
