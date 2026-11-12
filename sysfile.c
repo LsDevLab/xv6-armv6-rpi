@@ -316,6 +316,7 @@ sys_open(void)
   f->off = 0;
   f->readable = !(omode & O_WRONLY);
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
+  f->nonblock = (omode & O_NONBLOCK) ? 1 : 0;
   return fd;
 }
 
@@ -423,4 +424,35 @@ sys_pipe(void)
   fd[0] = fd0;
   fd[1] = fd1;
   return 0;
+}
+
+int
+sys_fcntl(void)
+{
+  int fd, cmd, arg;
+  struct file *f;
+
+  if(argint(0, &fd) < 0 || argint(1, &cmd) < 0)
+    return -1;
+  if(fd < 0 || fd >= NOFILE || (f = curr_proc->ofile[fd]) == 0)
+    return -1;
+
+  if(cmd == F_GETFL){
+    int fl = 0;
+    if(f->readable && f->writable) fl |= O_RDWR;
+    else if(f->writable) fl |= O_WRONLY;
+    else fl |= O_RDONLY;
+    if(f->nonblock) fl |= O_NONBLOCK;
+    return fl;
+  }
+  if(cmd == F_SETFL){
+    if(argint(2, &arg) < 0)
+      return -1;
+    if(arg & O_NONBLOCK)
+      f->nonblock = 1;
+    else
+      f->nonblock = 0;
+    return 0;
+  }
+  return -1;
 }

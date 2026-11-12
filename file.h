@@ -3,6 +3,7 @@ struct file {
   int ref; // reference count
   char readable;
   char writable;
+  char nonblock;
   struct pipe *pipe;
   struct inode *ip;
   uint off;
@@ -29,7 +30,7 @@ struct inode {
 // table mapping major device number to
 // device functions
 struct devsw {
-  int (*read)(struct inode*, char*, int);
+  int (*read)(struct inode*, char*, int, int);
   int (*write)(struct inode*, char*, int);
 };
 
@@ -38,4 +39,5 @@ extern struct devsw devsw[];
 #define CONSOLE 1
 #define UART_KEYBOARD 2
 #define FRAMEBUFFER 3
+#define MOUSE 4
 

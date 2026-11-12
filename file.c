@@ -7,6 +7,7 @@
 #include "param.h"
 #include "fs.h"
 #include "file.h"
+#include "stat.h"
 #include "spinlock.h"
 
 struct devsw devsw[NDEV];
@@ -32,6 +33,7 @@ filealloc(void)
   for(f = ftable.file; f < ftable.file + NFILE; f++){
     if(f->ref == 0){
       f->ref = 1;
+      f->nonblock = 0;
       release(&ftable.lock);
       return f;
     }
@@ -101,13 +103,20 @@ fileread(struct file *f, char *addr, int n)
   if(f->readable == 0)
     return -1;
   if(f->type == FD_PIPE)
-    return piperead(f->pipe, addr, n);
+    return piperead(f->pipe, addr, n, f->nonblock);
   if(f->type == FD_INODE){
     ilock(f->ip);
-//cprintf("inside fileread\n");
+    if(f->ip->type == T_DEV){
+      if(f->ip->major < 0 || f->ip->major >= NDEV || !devsw[f->ip->major].read){
+        iunlock(f->ip);
+        return -1;
+      }
+      r = devsw[f->ip->major].read(f->ip, addr, n, f->nonblock);
+      iunlock(f->ip);
+      return r;
+    }
     if((r = readi(f->ip, addr, f->off, n)) > 0)
       f->off += r;
-//cprintf("inside fileread: after readi rv=%x\n", r);
     iunlock(f->ip);
     return r;
   }
@@ -124,9 +133,8 @@ filewrite(struct file *f, char *addr, int n)
 
   if(f->writable == 0)
     return -1;
-//cprintf("inside filewrite\n");
   if(f->type == FD_PIPE)
-    return pipewrite(f->pipe, addr, n);
+    return pipewrite(f->pipe, addr, n, f->nonblock);
   if(f->type == FD_INODE){
     // write a few blocks at a time to avoid exceeding
     // the maximum log transaction size, including

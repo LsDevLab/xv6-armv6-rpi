@@ -106,3 +106,13 @@ memmove(void *vdst, void *vsrc, int n)
     *dst++ = *src++;
   return vdst;
 }
+
+void*
+memcpy(void *dst, const void *src, uint n)
+{
+  char *d = (char*)dst;
+  const char *s = (const char*)src;
+  while(n-- > 0)
+    *d++ = *s++;
+  return dst;
+}

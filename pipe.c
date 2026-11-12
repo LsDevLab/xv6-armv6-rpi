@@ -76,7 +76,7 @@ pipeclose(struct pipe *p, int writable)
 
 //PAGEBREAK: 40
 int
-pipewrite(struct pipe *p, char *addr, int n)
+pipewrite(struct pipe *p, char *addr, int n, int nonblock)
 {
   int i;
 
@@ -86,6 +86,10 @@ pipewrite(struct pipe *p, char *addr, int n)
       if(p->readopen == 0 || curr_proc->killed){
         release(&p->lock);
         return -1;
+      }
+      if(nonblock){
+        release(&p->lock);
+        return i > 0 ? i : -1;
       }
       wakeup(&p->nread);
       sleep(&p->nwrite, &p->lock);  //DOC: pipewrite-sleep
@@ -98,7 +102,7 @@ pipewrite(struct pipe *p, char *addr, int n)
 }
 
 int
-piperead(struct pipe *p, char *addr, int n)
+piperead(struct pipe *p, char *addr, int n, int nonblock)
 {
   int i;
 
@@ -107,6 +111,10 @@ piperead(struct pipe *p, char *addr, int n)
     if(curr_proc->killed){
       release(&p->lock);
       return -1;
+    }
+    if(nonblock){
+      release(&p->lock);
+      return 0;
     }
     sleep(&p->nread, &p->lock); //DOC: piperead-sleep
   }

@@ -39,7 +39,7 @@ void            bwrite(struct buf*);
 
 // uart_keyboard.c
 void uartkbdintr(int (*getc)(void));
-int uartkbdread(struct inode *ip, char *dst, int n);
+int uartkbdread(struct inode *ip, char *dst, int n, int nonblock);
 void uartkbdinit(void);
 
 // framebuffer.c
@@ -129,8 +129,8 @@ void            commit_trans();
 // pipe.c
 int             pipealloc(struct file**, struct file**);
 void            pipeclose(struct pipe*, int);
-int             piperead(struct pipe*, char*, int);
-int             pipewrite(struct pipe*, char*, int);
+int             piperead(struct pipe*, char*, int, int);
+int             pipewrite(struct pipe*, char*, int, int);
 
 //PAGEBREAK: 16
 // proc.c
@@ -247,6 +247,14 @@ void mailboxinit(void);
 
 
 
+// mouse.c
+void mouse_init(void);
+void mouse_post_event(int dx, int dy, int buttons);
+void usb_mouse_poll(void);
+void usb_kbd_poll(void);
+int mouseread(struct inode *ip, char *dst, int n, int nonblock);
+int mousewrite(struct inode *ip, char *src, int n);
+
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 
@@ -258,4 +266,13 @@ typedef struct {
   uint w;
   uint h;
   u16 *buffer;     // user-space pointer (nullable)
+  uint stride;     // buffer stride in pixels (0 defaults to w)
+  uint sx;         // sub-rect X in buffer
+  uint sy;         // sub-rect Y in buffer
 } fb_pixel_t;
+
+typedef struct {
+  int dx;
+  int dy;
+  int buttons;
+} mouse_event_t;

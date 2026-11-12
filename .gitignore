@@ -12,9 +12,29 @@
 *.map
 *.exp
 
-# Precompiled Headers
-*.gch
-*.pch
+# OS / IDE
+.DS_Store
+.idea/
+cmake-build-debug/
+
+# Build artifacts
+build/
+initcode
+initcode.out
+fs.img
+kernel.elf
+kernel.img
+kernel.dis
+kernel.asm
+kernel.sym
+initcode.asm
+tools/mkfs
+usr/_*
+usr/*.asm
+usr/*.sym
+csud/build/
+csud/libcsud.a
+!libcsud.a
 
 # Libraries
 *.lib

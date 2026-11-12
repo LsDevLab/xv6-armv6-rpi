@@ -215,4 +215,7 @@ typedef struct {
   uint w;
   uint h;
   u16 *buffer;     // user-space pointer (nullable)
+  uint stride;     // buffer stride in pixels (0 defaults to w)
+  uint sx;         // sub-rect X in buffer
+  uint sy;         // sub-rect Y in buffer
 } fb_pixel_t;

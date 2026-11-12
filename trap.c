@@ -150,6 +150,8 @@ trap(struct trapframe *tf)
 	    if(ip->gpupending[0] & (1 << IRQ_TIMER3)) {
 		istimer = 1;
 		timer3intr();
+		usb_mouse_poll();
+		usb_kbd_poll();
 	    }
 	    if(ip->gpupending[0] & (1 << IRQ_MINIUART)) {
 		miniuartintr();

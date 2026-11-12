@@ -98,6 +98,8 @@ int cmain( uint r0)
   dsb_barrier();
   framebufferinit(); // init graphics framebuffer
   uartkbdinit();
+  framebuffer_init();
+  mouse_init();
   draw_logo_colored();
   kinit1(end, P2V(8*1024*1024));  // reserve 8 pages for PGDIR
   kpgdir=p2v(K_PDX_BASE);

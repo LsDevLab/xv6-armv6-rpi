@@ -22,11 +22,13 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int fcntl(int, int, ...);
 
 // ulib.c
 int stat(char*, struct stat*);
 char* strcpy(char*, char*);
 void *memmove(void*, void*, int);
+void* memcpy(void*, const void*, uint);
 char* strchr(const char*, char c);
 int strcmp(const char*, const char*);
 void printf(int, char*, ...);
@@ -45,4 +47,13 @@ typedef struct {
   uint w;
   uint h;
   u16 *buffer;     // user-space pointer (nullable)
+  uint stride;     // buffer stride in pixels (0 defaults to w)
+  uint sx;         // sub-rect X in buffer
+  uint sy;         // sub-rect Y in buffer
 } fb_pixel_t;
+
+typedef struct {
+  int dx;
+  int dy;
+  int buttons;
+} mouse_event_t;

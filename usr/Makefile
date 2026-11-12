@@ -22,6 +22,7 @@ UPROGS=\
 	_wc\
 	_zombie\
 	_wm\
+	_mousetest\
 
 	#_usertests
 
@@ -32,12 +33,14 @@ _wm: wm.o wrapper.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ wm.o wrapper.o $(ULIB) -L ../ $(LIBGCC)
 	$(OBJDUMP) -S $@ > wm.asm
 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > wm.sym
+	arm-none-eabi-strip --strip-all $@
 
 
 _%: %.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o $@ $^  -L ../ $(LIBGCC)
 	$(OBJDUMP) -S $@ > $*.asm
 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym
+	arm-none-eabi-strip --strip-all $@
 
 _forktest: forktest.o $(ULIB)
 	# forktest has less library code linked in - needs to be small
@@ -45,7 +48,10 @@ _forktest: forktest.o $(ULIB)
 	$(LD) $(LDFLAGS) -N -e main -Ttext 0 -o _forktest forktest.o ulib.o usys.o
 	$(OBJDUMP) -S _forktest > forktest.asm
 
-$(FS_IMAGE): $(MKFS)  $(UPROGS)
+$(MKFS):
+	$(MAKE) -C ../tools
+
+$(FS_IMAGE): $(MKFS) $(UPROGS)
 	$(MKFS) $@  $(UPROGS) README
 	$(OBJDUMP) -S usys.o > usys.asm
 

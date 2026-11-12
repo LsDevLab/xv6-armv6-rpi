@@ -40,30 +40,12 @@ uartkbdintr(int (*getc)(void))
       procdump();
       break;
 
-    case C('U'):    // kill line
-      while(input.e != input.w &&
-            input.buf[(input.e - 1) % INPUT_BUF] != '\n'){
-        input.e--;
-            }
-      break;
-
-    case C('H'):
-    case '\x7f':    // backspace
-      if(input.e != input.w){
-        input.e--;
-      }
-      break;
-
     default:
       if(c != 0 && input.e - input.r < INPUT_BUF){
         c = (c == '\r') ? '\n' : c;
         input.buf[input.e++ % INPUT_BUF] = c;
-
-        if(c == '\n' || c == C('D') ||
-           input.e == input.r + INPUT_BUF){
-          input.w = input.e;
-          wakeup(&input.r);
-           }
+        input.w = input.e; // raw mode: deliver character immediately
+        wakeup(&input.r);
       }
       break;
     }
@@ -71,17 +53,39 @@ uartkbdintr(int (*getc)(void))
   release(&input.lock);
 }
 
+extern void KeyboardUpdate(void);
+extern char KeyboardGetChar(void);
+
+void
+usb_kbd_poll(void)
+{
+  KeyboardUpdate();
+  char c = KeyboardGetChar();
+  if(c != 0){
+    acquire(&input.lock);
+    if(input.e - input.r < INPUT_BUF){
+      c = (c == '\r') ? '\n' : c;
+      input.buf[input.e++ % INPUT_BUF] = c;
+      input.w = input.e;
+      wakeup(&input.r);
+    }
+    release(&input.lock);
+  }
+}
+
 /*
  * Read interface for /dev/uart_keyboard
  */
 int
-uartkbdread(struct inode *ip, char *dst, int n)
+uartkbdread(struct inode *ip, char *dst, int n, int nonblock)
 {
   uint target;
   int c;
 
   iunlock(ip);
   target = n;
+
+  usb_kbd_poll();
 
   acquire(&input.lock);
   while(n > 0){
@@ -90,6 +94,11 @@ uartkbdread(struct inode *ip, char *dst, int n)
         release(&input.lock);
         ilock(ip);
         return -1;
+      }
+      if(nonblock){
+        release(&input.lock);
+        ilock(ip);
+        return 0;
       }
       sleep(&input.r, &input.lock);
     }
@@ -105,13 +114,23 @@ uartkbdread(struct inode *ip, char *dst, int n)
     *dst++ = c;
     n--;
 
-    if(c == '\n')
+    // In raw mode, return immediately once buffered characters have been drained
+    if(input.r == input.w)
       break;
   }
   release(&input.lock);
   ilock(ip);
 
   return target - n;
+}
+
+int
+uartkbdwrite(struct inode *ip, char *buf, int n)
+{
+  int i;
+  for(i = 0; i < n; i++)
+    uartputc(buf[i]);
+  return n;
 }
 
 /*
@@ -124,5 +143,5 @@ uartkbdinit(void)
   input.r = input.w = input.e = 0;
 
   devsw[UART_KEYBOARD].read  = uartkbdread;
-  devsw[UART_KEYBOARD].write = 0;   // read-only device
+  devsw[UART_KEYBOARD].write = uartkbdwrite;
 }

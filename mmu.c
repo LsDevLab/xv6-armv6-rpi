@@ -99,6 +99,7 @@ void _uart_putc ( unsigned int c )
 
 void _puts(const char *s)
 {
+  s = (const char *)((uint)s & ~0x80000000);
   while (*s) {
     if (*s == '\n')
       _uart_putc('\r');

@@ -53,7 +53,11 @@ uint initframebuf(uint width, uint height, uint depth)
     fbinfo.fbp = 0;
     fbinfo.fbs = 0;
     writemailbox((uint *)&fbinfo, 1);
-    return readmailbox(1);
+    uint res = readmailbox(1);
+    if(fbinfo.fbp != 0) {
+        fbinfo.fbp = (uint)p2v(fbinfo.fbp & 0x3FFFFFFF);
+    }
+    return res;
 }
 
 void drawpixel(uint x, uint y)
@@ -211,6 +215,10 @@ cprintf(char *fmt, ...)
         if(c == 0)
             break;
         switch(c){
+            case 'c':
+                gpuputc(*argp);
+                uartputc(*argp++);
+            break;
             case 'd':
                 printint(*argp++, 10, 1);
             break;
@@ -299,10 +307,20 @@ void gpuputcolored(uint c, u16 color) {
 
 // Draw a filled rectangle
 void fb_fillrect(int x, int y, int w, int h, u16 color) {
-    for(int j = y; j < y+h && j < frameheight; j++) {
-        for(int i = x; i < x+w && i < framewidth; i++) {
-            setgpucolour(color);
-            drawpixel(i, j);
+    if(x < 0) { w += x; x = 0; }
+    if(y < 0) { h += y; y = 0; }
+    if(x >= (int)fbinfo.width || y >= (int)fbinfo.height || w <= 0 || h <= 0)
+        return;
+    if(x + w > (int)fbinfo.width)
+        w = fbinfo.width - x;
+    if(y + h > (int)fbinfo.height)
+        h = fbinfo.height - y;
+
+    u16 *fb = (u16 *) fbinfo.fbp;
+    for(int j = y; j < y + h; j++) {
+        u16 *row = fb + j * fbinfo.width + x;
+        for(int i = 0; i < w; i++) {
+            row[i] = color;
         }
     }
 }
@@ -322,35 +340,42 @@ fbwrite(struct inode *ip, char *userbuf, int n)
                   sizeof(fb_pixel_t)) < 0) {
             release(&cons.lock);
             return -1;
-                  }
+        }
 
-        // ---- NEW PART STARTS HERE ----
-        if(pix.buffer && pix.w && pix.h) {
-            for(uint yy = 0; yy < pix.h; yy++){
-                for(uint xx = 0; xx < pix.w; xx++){
-                    uint dx = pix.x + xx;
-                    uint dy = pix.y + yy;
+        // 1. FAST BATCH SCANLINE BLIT FROM USER BUFFER
+        if(pix.buffer && pix.w > 0 && pix.h > 0) {
+            uint stride = pix.stride ? pix.stride : pix.w;
+            u16 *fb = (u16 *) fbinfo.fbp;
 
-                    if(dx >= fbinfo.width || dy >= fbinfo.height)
-                        continue;
+            for(uint row = 0; row < pix.h; row++) {
+                uint dy = pix.y + row;
+                if(dy >= fbinfo.height)
+                    break;
+                uint dx = pix.x;
+                if(dx >= fbinfo.width)
+                    continue;
 
-                    u16 col;
-                    uint boff = (yy * pix.w + xx) * sizeof(u16);
+                uint copy_w = pix.w;
+                if(dx + copy_w > fbinfo.width)
+                    copy_w = fbinfo.width - dx;
 
-                    if(copyin(curr_proc->pgdir,
-                              (char*)&col,
-                              (uint)pix.buffer + boff,
-                              sizeof(u16)) < 0) {
-                        release(&cons.lock);
-                        return -1;
-                              }
+                uint src_offset = ((pix.sy + row) * stride + pix.sx) * sizeof(u16);
+                u16 *dst = fb + dy * fbinfo.width + dx;
 
-                    setgpucolour(col);
-                    drawpixel(dx, dy);
+                if(copyin(curr_proc->pgdir,
+                          (char*)dst,
+                          (uint)pix.buffer + src_offset,
+                          copy_w * sizeof(u16)) < 0) {
+                    release(&cons.lock);
+                    return -1;
                 }
             }
         }
-        // ---- EXISTING BEHAVIOR ----
+        // 2. FAST SOLID FILLED RECTANGLE
+        else if(pix.w > 0 && pix.h > 0 && pix.buffer == 0) {
+            fb_fillrect(pix.x, pix.y, pix.w, pix.h, pix.color);
+        }
+        // 3. SINGLE CHARACTER OR SINGLE PIXEL
         else if(pix.x < fbinfo.width && pix.y < fbinfo.height) {
             if(pix.ch) {
                 setgpucolour(pix.color);
@@ -371,16 +396,62 @@ fbwrite(struct inode *ip, char *userbuf, int n)
 
 
 int
-fbread(struct inode *ip, char *userbuf, int n)
+fbread(struct inode *ip, char *userbuf, int n, int nonblock)
 {
-    // Optional: you can implement read to return framebuffer content
-    // For now, let's just return 0
-    return 0;
+    int off = 0;
+    acquire(&cons.lock);
+
+    while(n >= sizeof(fb_pixel_t)) {
+        fb_pixel_t pix;
+
+        if(copyin(curr_proc->pgdir,
+                  (char*)&pix,
+                  (uint)userbuf + off,
+                  sizeof(fb_pixel_t)) < 0) {
+            release(&cons.lock);
+            return -1;
+        }
+
+        // Batch scanline read from framebuffer into user buffer
+        if(pix.buffer && pix.w > 0 && pix.h > 0) {
+            uint stride = pix.stride ? pix.stride : pix.w;
+            u16 *fb = (u16 *) fbinfo.fbp;
+
+            for(uint row = 0; row < pix.h; row++) {
+                uint dy = pix.y + row;
+                if(dy >= fbinfo.height)
+                    break;
+                uint dx = pix.x;
+                if(dx >= fbinfo.width)
+                    continue;
+
+                uint copy_w = pix.w;
+                if(dx + copy_w > fbinfo.width)
+                    copy_w = fbinfo.width - dx;
+
+                uint dst_offset = ((pix.sy + row) * stride + pix.sx) * sizeof(u16);
+                u16 *src = fb + dy * fbinfo.width + dx;
+
+                if(copyout(curr_proc->pgdir,
+                           (uint)pix.buffer + dst_offset,
+                           (void*)src,
+                           copy_w * sizeof(u16)) < 0) {
+                    release(&cons.lock);
+                    return -1;
+                }
+            }
+        }
+
+        off += sizeof(fb_pixel_t);
+        n -= sizeof(fb_pixel_t);
+    }
+
+    release(&cons.lock);
+    return off;
 }
 
 // Device initialization
 void framebuffer_init(void) {
-    memset(devsw, 0, sizeof(struct devsw)*NDEV);
     devsw[FRAMEBUFFER].read = fbread;
     devsw[FRAMEBUFFER].write = fbwrite;
 }
