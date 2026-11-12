@@ -287,7 +287,7 @@ void HcdTransmitChannel(u8 channel, void* buffer) {
 	WriteThroughReg(&Host->Channel[channel].Characteristic);	
 }
 
-Result HcdChannelInterruptToError(struct UsbDevice *device, struct ChannelInterrupts interrupts, bool isComplete) {
+Result HcdChannelInterruptToError(struct UsbDevice *device, struct UsbPipeAddress *pipe, struct ChannelInterrupts interrupts, bool isComplete) {
 	Result result;
 
 	result = OK;
@@ -302,6 +302,9 @@ Result HcdChannelInterruptToError(struct UsbDevice *device, struct ChannelInterr
 		return ErrorDevice;
 	}
 	if (interrupts.NegativeAcknowledgement) {
+		if (pipe != NULL && pipe->Type == Bulk && pipe->Direction == In) {
+			return ErrorTimeout;
+		}
 		device->Error =  NoAcknowledge;
 		LOG("HCD: NAK error in transfer.\n");
 		return ErrorDevice;
@@ -409,7 +412,7 @@ Result HcdChannelSendWaitOne(struct UsbDevice *device,
 					continue;
 				}
 	
-				if ((result = HcdChannelInterruptToError(device, Host->Channel[channel].Interrupt, false)) != OK) {
+				if ((result = HcdChannelInterruptToError(device, pipe, Host->Channel[channel].Interrupt, false)) != OK) {
 					LOG_DEBUGF("HCD: Control message to %#x: %02x%02x%02x%02x %02x%02x%02x%02x.\n", *(u32*)pipe, 
 						((u8*)request)[0], ((u8*)request)[1], ((u8*)request)[2], ((u8*)request)[3],
 						((u8*)request)[4], ((u8*)request)[5], ((u8*)request)[6], ((u8*)request)[7]);
@@ -425,7 +428,10 @@ Result HcdChannelSendWaitOne(struct UsbDevice *device,
 				continue;
 			}				
 		} else {				
-			if ((result = HcdChannelInterruptToError(device, Host->Channel[channel].Interrupt, !Host->Channel[channel].SplitControl.SplitEnable)) != OK) {
+			if ((result = HcdChannelInterruptToError(device, pipe, Host->Channel[channel].Interrupt, !Host->Channel[channel].SplitControl.SplitEnable)) != OK) {
+				if (result == ErrorTimeout && pipe != NULL && pipe->Type == Bulk && pipe->Direction == In) {
+					return ErrorTimeout;
+				}
 				LOG_DEBUGF("HCD: Control message to %#x: %02x%02x%02x%02x %02x%02x%02x%02x.\n", *(u32*)pipe, 
 					((u8*)request)[0], ((u8*)request)[1], ((u8*)request)[2], ((u8*)request)[3],
 					((u8*)request)[4], ((u8*)request)[5], ((u8*)request)[6], ((u8*)request)[7]);
@@ -438,8 +444,11 @@ Result HcdChannelSendWaitOne(struct UsbDevice *device,
 	}
 
 	if (globalTries == 3 || actualTries == 10) {
+		if (pipe != NULL && pipe->Type == Bulk && pipe->Direction == In) {
+			return ErrorTimeout;
+		}
 		LOGF("HCD: Request to %s has failed 3 times.\n", UsbGetDescription(device));
-		if ((result = HcdChannelInterruptToError(device, Host->Channel[channel].Interrupt, !Host->Channel[channel].SplitControl.SplitEnable)) != OK) {
+		if ((result = HcdChannelInterruptToError(device, pipe, Host->Channel[channel].Interrupt, !Host->Channel[channel].SplitControl.SplitEnable)) != OK) {
 			LOG_DEBUGF("HCD: Control message to %#x: %02x%02x%02x%02x %02x%02x%02x%02x.\n", *(u32*)pipe, 
 				((u8*)request)[0], ((u8*)request)[1], ((u8*)request)[2], ((u8*)request)[3],
 				((u8*)request)[4], ((u8*)request)[5], ((u8*)request)[6], ((u8*)request)[7]);
@@ -462,6 +471,9 @@ Result HcdChannelSendWait(struct UsbDevice *device,
 	tries = 0;
 retry:
 	if (tries++ == 3) {
+		if (pipe != NULL && pipe->Type == Bulk && pipe->Direction == In) {
+			return ErrorTimeout;
+		}
 		LOGF("HCD: Failed to send to %s after 3 attempts.\n", UsbGetDescription(device));
 		return ErrorTimeout;
 	} 
@@ -476,6 +488,9 @@ retry:
 	do {
 		packets = Host->Channel[channel].TransferSize.PacketCount;
 		if ((result = HcdChannelSendWaitOne(device, pipe, channel, buffer, bufferLength, transfer, request)) != OK) {
+			if (result == ErrorTimeout && pipe != NULL && pipe->Type == Bulk && pipe->Direction == In) {
+				return ErrorTimeout;
+			}
 			if (result == ErrorRetry) goto retry;
 			return result;
 		}
@@ -581,6 +596,31 @@ Result HcdSumbitControlMessage(struct UsbDevice *device,
 	device->Error = NoError;
 
 	return OK;
+}
+
+Result HcdSubmitBulkMessage(struct UsbDevice *device, 
+	struct UsbPipeAddress pipe, void* buffer, u32 bufferLength, u32 *transferred) {
+	Result result;
+	u8 channel = (pipe.Direction == In) ? 2 : 3;
+	static enum PacketId tx_pid = Data0;
+	static enum PacketId rx_pid = Data0;
+	enum PacketId pid = (pipe.Direction == In) ? rx_pid : tx_pid;
+
+	if (transferred) *transferred = 0;
+	device->Error = None;
+	device->LastTransfer = 0;
+
+	result = HcdChannelSendWait(device, &pipe, channel, buffer, bufferLength, NULL, pid);
+	if (result == OK) {
+		u32 actual = bufferLength - Host->Channel[channel].TransferSize.TransferSize;
+		if (transferred) *transferred = actual;
+		device->LastTransfer = actual;
+		if (pipe.Direction == In)
+			rx_pid = (rx_pid == Data0) ? Data1 : Data0;
+		else
+			tx_pid = (tx_pid == Data0) ? Data1 : Data0;
+	}
+	return result;
 }
 	
 Result HcdInitialise() {	

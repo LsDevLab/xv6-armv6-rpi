@@ -108,6 +108,8 @@ void UsbCheckForChange();
 
 Result UsbSetInterface(struct UsbDevice *device, u8 interfaceNumber, u8 alternateSetting);
 
+Result UsbReadString(struct UsbDevice *device, u8 stringIndex, char* buffer, u32 length);
+
 
 #ifdef __cplusplus
 }

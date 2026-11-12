@@ -255,6 +255,13 @@ void usb_kbd_poll(void);
 int mouseread(struct inode *ip, char *dst, int n, int nonblock);
 int mousewrite(struct inode *ip, char *src, int n);
 
+// net.c
+void net_init(void);
+int  net_is_up(void);
+int  net_tx(const void *buf, int len);
+int  net_rx(void *buf, int max_len);
+int  net_arp_test(void);
+
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
 

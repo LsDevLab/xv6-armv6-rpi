@@ -38,12 +38,12 @@ OBJS = \
 KERNEL_SRC = bio.c console.c exception.c exec.c file.c fs.c kalloc.c \
              log.c mailbox.c main.c memide.c mmu.c pipe.c \
              proc.c spinlock.c string.c syscall.c sysfile.c sysproc.c \
-             timer.c trap.c uart.c wrapper.c vm.c framebuffer.c uart_keyboard.c mouse.c
+             timer.c trap.c uart.c wrapper.c vm.c framebuffer.c uart_keyboard.c mouse.c net.c
 
 KERN_OBJS = $(patsubst %.c,%.o,$(KERNEL_SRC)) entry.o keyboard.o
 
 libcsud.a:
-	make -C csud driver CONFIG=FINAL TYPE=STANDALONE TARGET=RPI GNU=arm-none-eabi-
+	make -C csud driver CONFIG=FINAL TYPE=LOWLEVEL TARGET=RPI GNU=arm-none-eabi-
 	cp -f csud/libcsud.a .
 
 kernel.elf: $(addprefix build/,$(KERN_OBJS)) kernel.ld build/initcode build/fs.img libcsud.a
@@ -70,12 +70,12 @@ qemu: kernel.elf
 	@echo "  4. Press [1] or [2] (or Tab) to switch terminal window focus."
 	@echo "  5. Press Ctrl-A then X in your terminal to quit QEMU."
 	@echo "==================================================================\n"
-	$(QEMU) -M raspi0 -kernel kernel.elf -usb -device usb-mouse -device usb-kbd -serial null -serial mon:stdio
+	$(QEMU) -M raspi0 -kernel kernel.elf -usb -device usb-mouse -device usb-kbd -netdev user,id=net0 -device usb-net,netdev=net0 -serial null -serial mon:stdio
 
 qemu-nox: kernel.elf
 	@echo "Starting QEMU headless (-display none)..."
 	@echo "Serial console is active on this terminal. Press Ctrl-A then X to terminate.\n"
-	$(QEMU) -M raspi0 -kernel kernel.elf -display none -serial null -serial stdio
+	$(QEMU) -M raspi0 -kernel kernel.elf -display none -usb -device usb-mouse -device usb-kbd -netdev user,id=net0 -device usb-net,netdev=net0 -serial null -serial stdio
 
 qemu-gdb: kernel.elf
 	@echo "Starting QEMU waiting for GDB on tcp::1234..."

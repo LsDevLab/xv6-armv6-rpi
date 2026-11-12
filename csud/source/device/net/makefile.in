@@ -1,0 +1,9 @@
+DIR := $(DIR)net/
+
+ifeq ("$(LIB_NET)", "1")
+CFLAGS += -DLIB_NET
+OBJECTS += $(BUILD)ecm.c.o
+
+$(BUILD)ecm.c.o: $(DIR)ecm.c $(INCDIR)device/net/ecm.h $(INCDIR)hcd/hcd.h $(INCDIR)platform/platform.h $(INCDIR)usbd/device.h $(INCDIR)usbd/descriptors.h $(INCDIR)usbd/pipe.h $(INCDIR)usbd/usbd.h
+	$(GCC) $< -o $@
+endif

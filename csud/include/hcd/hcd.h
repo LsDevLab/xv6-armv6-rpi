@@ -73,6 +73,12 @@ Result HcdSumbitControlMessage(struct UsbDevice *device,
 	struct UsbPipeAddress pipe, void* buffer, u32 bufferLength,
 	struct UsbDeviceRequest *request);
 
+/**
+	\brief Sends or receives a bulk message to/from a device endpoint.
+*/
+Result HcdSubmitBulkMessage(struct UsbDevice *device, 
+	struct UsbPipeAddress pipe, void* buffer, u32 bufferLength, u32 *transferred);
+
 #include "dwc/designware20.h"
 
 #ifdef __cplusplus

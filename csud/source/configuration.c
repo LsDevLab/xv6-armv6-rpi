@@ -14,6 +14,9 @@
 
 #include <usbd/device.h>
 #include <usbd/descriptors.h>
+#ifdef LIB_NET
+#include <device/net/ecm.h>
+#endif
 
 // Add load methods for new modules wrapped in ifdefs here:
 void UsbLoad();
@@ -38,6 +41,9 @@ void KbdLoad();
 #endif
 #ifdef LIB_MOUSE
 void MouseLoad();
+#endif
+#ifdef LIB_NET
+void NetLoad();
 #endif
 
 void ConfigurationLoad() {
@@ -65,5 +71,8 @@ void ConfigurationLoad() {
 #endif
 #ifdef LIB_MOUSE
 	MouseLoad();
+#endif
+#ifdef LIB_NET
+	NetLoad();
 #endif
 }

@@ -71,13 +71,15 @@ This document outlines the master implementation plan for extending `xv6-armv6-r
 
 ---
 
-## Phase 5: Networking & TCP/IP Stack
+## Phase 5: Networking & TCP/IP Stack [IN PROGRESS]
 * **Objective**: Connect the Raspberry Pi to the local network and internet.
 * **Key Deliverables**:
-  1. **Network Hardware Driver**:
-     - Driver for the SMSC LAN9512 Ethernet controller (internal USB device on Raspberry Pi 1 Model B).
-     - QEMU networking support (SMC91C111 or SLIP over serial for quick testing).
-  2. **TCP/IP Protocol Stack**:
+  1. [x] **Network Hardware Driver (USB CDC-ECM & Ethernet Layer)**:
+     - Implemented USB CDC-ECM driver (`csud/source/device/net/ecm.c`) with automatic detection of CDC Communications and CDC Data interfaces.
+     - Implemented DWC2 USB bulk DMA endpoint transfers (`HcdSubmitBulkMessage`) in `designware20.c` with split transaction handling and non-blocking NAK management.
+     - Implemented kernel network subsystem (`net.c`, `net.h`) providing `net_tx()` and `net_rx()` DMA framing.
+     - Verified end-to-end layer 2 Ethernet networking in QEMU: Transmitted 60-byte ARP request to virtual gateway `10.0.2.2`, received and decoded live 64-byte ARP reply with gateway MAC `52:55:0a:00:02:02`.
+  2. [ ] **TCP/IP Protocol Stack**:
      - Integration of lwIP (lightweight IP) or an xv6-tailored micro-stack:
        - Ethernet framing (MAC / IEEE 802.3).
        - ARP (Address Resolution Protocol) cache.

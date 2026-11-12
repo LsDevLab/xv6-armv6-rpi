@@ -8,6 +8,14 @@ $(BUILD)hub.c.o: $(DIR)hub.c $(INCDIR)device/hub.h $(INCDIR)hcd/hcd.h $(INCDIR)p
 	$(GCC) $< -o $@
 endif
 
+DEVICE_DIR := $(DIR)
+
 ifeq ("$(LIB_HID)", "1")
-include $(DIR)hid/makefile.in
+DIR := $(DEVICE_DIR)
+include $(DEVICE_DIR)hid/makefile.in
+endif
+
+ifeq ("$(LIB_NET)", "1")
+DIR := $(DEVICE_DIR)
+include $(DEVICE_DIR)net/makefile.in
 endif
