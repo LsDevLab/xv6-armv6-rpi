@@ -111,6 +111,7 @@ extern int sys_socket(void);
 extern int sys_connect(void);
 extern int sys_dns(void);
 extern int sys_ping(void);
+extern int sys_dhcp(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -139,6 +140,7 @@ static int (*syscalls[])(void) = {
 [SYS_connect] sys_connect,
 [SYS_dns]     sys_dns,
 [SYS_ping]    sys_ping,
+[SYS_dhcp]    sys_dhcp,
 };
 
 void

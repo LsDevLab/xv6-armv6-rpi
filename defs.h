@@ -261,6 +261,7 @@ int  net_is_up(void);
 int  net_tx(const void *buf, int len);
 int  net_rx(void *buf, int max_len);
 void net_poll(void);
+int  net_dhcp_acquire(void);
 int  net_arp_test(void);
 int  net_ping(const uchar dst_ip[4], int seq, int timeout_ticks);
 int  net_dns_resolve(const char *hostname, uchar resolved_ip[4]);

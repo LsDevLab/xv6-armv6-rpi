@@ -25,14 +25,59 @@ extern void CdcEcmGetMac(uchar mac[6]);
 extern int  CdcEcmTx(const void *buf, uint len);
 extern int  CdcEcmRx(void *buf, uint max_len, uint *transferred);
 
-// Networking configuration for QEMU / SLIRP
-static const uchar my_ip[4]      = {10, 0, 2, 15};
-static const uchar gateway_ip[4] = {10, 0, 2, 2};
-static const uchar netmask[4]    = {255, 255, 255, 0};
-static const uchar dns_ip[4]     = {10, 0, 2, 3}; // QEMU SLIRP DNS Proxy (Host Wi-Fi)
+// Static fallback configuration for QEMU / SLIRP
+static const uchar default_ip[4]      = {10, 0, 2, 15};
+static const uchar default_gateway[4] = {10, 0, 2, 2};
+static const uchar default_netmask[4] = {255, 255, 255, 0};
+static const uchar default_dns[4]     = {10, 0, 2, 3};
+
+// Active network configuration (configured dynamically via DHCP)
+static uchar my_ip[4]      = {0, 0, 0, 0};
+static uchar gateway_ip[4] = {0, 0, 0, 0};
+static uchar netmask[4]    = {0, 0, 0, 0};
+static uchar dns_ip[4]     = {0, 0, 0, 0};
 
 static uchar my_mac[6];
 static ushort next_ip_id = 1;
+
+static void net_send_gratuitous_arp(void);
+
+// DHCP Client (RFC 2131)
+struct dhcp_packet {
+  uchar  op;          // 1 = BOOTREQUEST, 2 = BOOTREPLY
+  uchar  htype;       // 1 = 10Mb Ethernet
+  uchar  hlen;        // 6 = Ethernet MAC length
+  uchar  hops;        // 0
+  uint   xid;         // Transaction ID
+  ushort secs;        // Seconds elapsed
+  ushort flags;       // 0x8000 = Broadcast
+  uchar  ciaddr[4];   // Client IP
+  uchar  yiaddr[4];   // Your (client) IP
+  uchar  siaddr[4];   // Next server IP
+  uchar  giaddr[4];   // Relay agent IP
+  uchar  chaddr[16];  // Client hardware address
+  uchar  sname[64];   // Server host name
+  uchar  file[128];   // Boot file name
+  uchar  magic[4];    // 0x63, 0x82, 0x53, 0x63
+  uchar  options[308]; // Options
+} __attribute__((packed));
+
+enum dhcp_state_enum {
+  DHCP_IDLE = 0,
+  DHCP_DISCOVER_SENT,
+  DHCP_REQUEST_SENT,
+  DHCP_BOUND,
+  DHCP_FAILED
+};
+
+static volatile enum dhcp_state_enum dhcp_state = DHCP_IDLE;
+static uint   dhcp_xid = 0;
+static uint   dhcp_last_tx = 0;
+static uchar  dhcp_offered_ip[4];
+static uchar  dhcp_server_id[4];
+static uchar  dhcp_netmask[4];
+static uchar  dhcp_gateway[4];
+static uchar  dhcp_dns[4];
 
 // ARP Table
 #define ARP_TABLE_SIZE 8
@@ -233,20 +278,28 @@ net_ip_send(const uchar dst_ip[4], uchar proto, const void *payload, int len)
   if (!CdcEcmIsAttached() || len < 0 || len > 1460)
     return -1;
 
-  // Routing: If in local subnet, send directly; else route to gateway
-  const uchar *next_hop = dst_ip;
-  if ((dst_ip[0] & netmask[0]) != (my_ip[0] & netmask[0]) ||
-      (dst_ip[1] & netmask[1]) != (my_ip[1] & netmask[1]) ||
-      (dst_ip[2] & netmask[2]) != (my_ip[2] & netmask[2])) {
-    next_hop = gateway_ip;
-  }
+  int is_bcast = (dst_ip[0] == 255 && dst_ip[1] == 255 &&
+                  dst_ip[2] == 255 && dst_ip[3] == 255);
 
   uchar next_hop_mac[6];
-  if (net_arp_resolve(next_hop, next_hop_mac) != 0) {
-    cprintf("NET: Could not resolve MAC for next hop ");
-    print_ip(next_hop);
-    cprintf("\n");
-    return -1;
+
+  if (is_bcast) {
+    memset(next_hop_mac, 0xFF, 6);
+  } else {
+    // Routing: If in local subnet, send directly; else route to gateway
+    const uchar *next_hop = dst_ip;
+    if ((dst_ip[0] & netmask[0]) != (my_ip[0] & netmask[0]) ||
+        (dst_ip[1] & netmask[1]) != (my_ip[1] & netmask[1]) ||
+        (dst_ip[2] & netmask[2]) != (my_ip[2] & netmask[2])) {
+      next_hop = gateway_ip;
+    }
+
+    if (net_arp_resolve(next_hop, next_hop_mac) != 0) {
+      cprintf("NET: Could not resolve MAC for next hop ");
+      print_ip(next_hop);
+      cprintf("\n");
+      return -1;
+    }
   }
 
   static uchar frame[ETH_FRAME_LEN] __attribute__((aligned(4)));
@@ -383,6 +436,243 @@ tcp_send_ack(struct tcp_sock *sock, uchar extra_flags)
   return net_ip_send(sock->dst_ip, IPPROTO_TCP, ack_buf, sizeof(ack_buf));
 }
 
+static void
+dhcp_parse_options(const uchar *opts, int max_len, uchar *msg_type,
+                   uchar server_id[4], uchar netmask_out[4],
+                   uchar gateway_out[4], uchar dns_out[4])
+{
+  int i = 0;
+  while (i < max_len) {
+    uchar code = opts[i++];
+    if (code == 0) continue; // Pad
+    if (code == 255) break;  // End
+    if (i >= max_len) break;
+    uchar len = opts[i++];
+    if (i + len > max_len) break;
+
+    if (code == 53 && len >= 1 && msg_type) {
+      *msg_type = opts[i];
+    } else if (code == 54 && len == 4 && server_id) {
+      memmove(server_id, &opts[i], 4);
+    } else if (code == 1 && len == 4 && netmask_out) {
+      memmove(netmask_out, &opts[i], 4);
+    } else if (code == 3 && len >= 4 && gateway_out) {
+      memmove(gateway_out, &opts[i], 4);
+    } else if (code == 6 && len >= 4 && dns_out) {
+      memmove(dns_out, &opts[i], 4);
+    }
+    i += len;
+  }
+}
+
+static int
+net_dhcp_send_discover(void)
+{
+  static struct dhcp_packet pkt __attribute__((aligned(4)));
+  memset(&pkt, 0, sizeof(pkt));
+
+  pkt.op = 1;     // BOOTREQUEST
+  pkt.htype = 1;  // 10Mb Ethernet
+  pkt.hlen = 6;   // MAC length
+  pkt.hops = 0;
+  pkt.xid = htonl(dhcp_xid);
+  pkt.secs = 0;
+  pkt.flags = htons(0x8000); // Broadcast reply flag
+  memmove(pkt.chaddr, my_mac, 6);
+
+  // Magic cookie
+  pkt.magic[0] = 0x63;
+  pkt.magic[1] = 0x82;
+  pkt.magic[2] = 0x53;
+  pkt.magic[3] = 0x63;
+
+  int opt_idx = 0;
+  // Option 53: DHCP Message Type = 1 (DHCPDISCOVER)
+  pkt.options[opt_idx++] = 53;
+  pkt.options[opt_idx++] = 1;
+  pkt.options[opt_idx++] = 1;
+
+  // Option 61: Client Identifier (Type 1 Ethernet + MAC)
+  pkt.options[opt_idx++] = 61;
+  pkt.options[opt_idx++] = 7;
+  pkt.options[opt_idx++] = 1;
+  memmove(&pkt.options[opt_idx], my_mac, 6);
+  opt_idx += 6;
+
+  // Option 55: Parameter Request List (1=Subnet, 3=Router, 6=DNS)
+  pkt.options[opt_idx++] = 55;
+  pkt.options[opt_idx++] = 3;
+  pkt.options[opt_idx++] = 1;
+  pkt.options[opt_idx++] = 3;
+  pkt.options[opt_idx++] = 6;
+
+  // Option 255: End
+  pkt.options[opt_idx++] = 255;
+
+  int pkt_len = 240 + opt_idx;
+  if (pkt_len < 300) pkt_len = 300;
+
+  uchar bcast_ip[4] = {255, 255, 255, 255};
+  return net_udp_send(bcast_ip, 68, 67, &pkt, pkt_len);
+}
+
+static int
+net_dhcp_send_request(void)
+{
+  static struct dhcp_packet pkt __attribute__((aligned(4)));
+  memset(&pkt, 0, sizeof(pkt));
+
+  pkt.op = 1;     // BOOTREQUEST
+  pkt.htype = 1;  // 10Mb Ethernet
+  pkt.hlen = 6;   // MAC length
+  pkt.hops = 0;
+  pkt.xid = htonl(dhcp_xid);
+  pkt.secs = 0;
+  pkt.flags = htons(0x8000); // Broadcast reply flag
+  memmove(pkt.chaddr, my_mac, 6);
+
+  // Magic cookie
+  pkt.magic[0] = 0x63;
+  pkt.magic[1] = 0x82;
+  pkt.magic[2] = 0x53;
+  pkt.magic[3] = 0x63;
+
+  int opt_idx = 0;
+  // Option 53: DHCP Message Type = 3 (DHCPREQUEST)
+  pkt.options[opt_idx++] = 53;
+  pkt.options[opt_idx++] = 1;
+  pkt.options[opt_idx++] = 3;
+
+  // Option 61: Client Identifier (Type 1 Ethernet + MAC)
+  pkt.options[opt_idx++] = 61;
+  pkt.options[opt_idx++] = 7;
+  pkt.options[opt_idx++] = 1;
+  memmove(&pkt.options[opt_idx], my_mac, 6);
+  opt_idx += 6;
+
+  // Option 50: Requested IP Address
+  pkt.options[opt_idx++] = 50;
+  pkt.options[opt_idx++] = 4;
+  memmove(&pkt.options[opt_idx], dhcp_offered_ip, 4);
+  opt_idx += 4;
+
+  // Option 54: Server Identifier
+  if (dhcp_server_id[0] != 0 || dhcp_server_id[1] != 0 ||
+      dhcp_server_id[2] != 0 || dhcp_server_id[3] != 0) {
+    pkt.options[opt_idx++] = 54;
+    pkt.options[opt_idx++] = 4;
+    memmove(&pkt.options[opt_idx], dhcp_server_id, 4);
+    opt_idx += 4;
+  }
+
+  // Option 55: Parameter Request List (1=Subnet, 3=Router, 6=DNS)
+  pkt.options[opt_idx++] = 55;
+  pkt.options[opt_idx++] = 3;
+  pkt.options[opt_idx++] = 1;
+  pkt.options[opt_idx++] = 3;
+  pkt.options[opt_idx++] = 6;
+
+  // Option 255: End
+  pkt.options[opt_idx++] = 255;
+
+  int pkt_len = 240 + opt_idx;
+  if (pkt_len < 300) pkt_len = 300;
+
+  uchar bcast_ip[4] = {255, 255, 255, 255};
+  return net_udp_send(bcast_ip, 68, 67, &pkt, pkt_len);
+}
+
+static void
+net_dhcp_input(const uchar *data, int len, const uchar *src_mac)
+{
+  if (len < 240) return;
+  const struct dhcp_packet *pkt = (const struct dhcp_packet*)data;
+
+  // Check opcode (BOOTREPLY = 2), transaction ID, and MAC
+  if (pkt->op != 2) return;
+  if (ntohl(pkt->xid) != dhcp_xid) return;
+  if (memcmp(pkt->chaddr, my_mac, 6) != 0) return;
+
+  // Check magic cookie: 0x63, 0x82, 0x53, 0x63
+  if (pkt->magic[0] != 0x63 || pkt->magic[1] != 0x82 ||
+      pkt->magic[2] != 0x53 || pkt->magic[3] != 0x63) return;
+
+  uchar msg_type = 0;
+  uchar srv_id[4] = {0};
+  uchar mask[4] = {0};
+  uchar gw[4] = {0};
+  uchar dns[4] = {0};
+
+  dhcp_parse_options(pkt->options, len - 240, &msg_type, srv_id, mask, gw, dns);
+
+  if (dhcp_state == DHCP_DISCOVER_SENT && msg_type == 2) { // DHCPOFFER
+    cprintf("NET: DHCP offer received: IP ");
+    print_ip(pkt->yiaddr);
+    cprintf("\n");
+
+    memmove(dhcp_offered_ip, pkt->yiaddr, 4);
+    if (srv_id[0] != 0 || srv_id[1] != 0 || srv_id[2] != 0 || srv_id[3] != 0) {
+      memmove(dhcp_server_id, srv_id, 4);
+    } else {
+      memmove(dhcp_server_id, pkt->siaddr, 4);
+    }
+    if (mask[0] != 0) memmove(dhcp_netmask, mask, 4);
+    if (gw[0] != 0)   memmove(dhcp_gateway, gw, 4);
+    if (dns[0] != 0)  memmove(dhcp_dns, dns, 4);
+
+    dhcp_state = DHCP_REQUEST_SENT;
+    dhcp_last_tx = net_time_ms();
+    net_dhcp_send_request();
+  } else if (dhcp_state == DHCP_REQUEST_SENT && msg_type == 5) { // DHCPACK
+    cprintf("NET: DHCP ACK received: IP ");
+    print_ip(pkt->yiaddr);
+    cprintf("\n");
+
+    memmove(dhcp_offered_ip, pkt->yiaddr, 4);
+    if (mask[0] != 0) memmove(dhcp_netmask, mask, 4);
+    if (gw[0] != 0)   memmove(dhcp_gateway, gw, 4);
+    if (dns[0] != 0)  memmove(dhcp_dns, dns, 4);
+
+    // Apply configuration
+    memmove(my_ip, dhcp_offered_ip, 4);
+    if (dhcp_netmask[0] != 0)
+      memmove(netmask, dhcp_netmask, 4);
+    else
+      memmove(netmask, default_netmask, 4);
+
+    if (dhcp_gateway[0] != 0)
+      memmove(gateway_ip, dhcp_gateway, 4);
+    else if (dhcp_server_id[0] != 0)
+      memmove(gateway_ip, dhcp_server_id, 4);
+    else
+      memmove(gateway_ip, default_gateway, 4);
+
+    if (dhcp_dns[0] != 0)
+      memmove(dns_ip, dhcp_dns, 4);
+    else
+      memmove(dns_ip, default_dns, 4);
+
+    // Cache gateway MAC in ARP table
+    if (src_mac) {
+      arp_table_update(gateway_ip, src_mac);
+    }
+    if (gateway_ip[0] == 10 && gateway_ip[1] == 0 && gateway_ip[2] == 2 && gateway_ip[3] == 2) {
+      static const uchar qemu_gw_mac[6] = {0x52, 0x55, 0x0a, 0x00, 0x02, 0x02};
+      arp_table_update(gateway_ip, qemu_gw_mac);
+    }
+    if (dns_ip[0] == 10 && dns_ip[1] == 0 && dns_ip[2] == 2 && dns_ip[3] == 3) {
+      static const uchar qemu_dns_mac[6] = {0x52, 0x55, 0x0a, 0x00, 0x02, 0x03};
+      arp_table_update(dns_ip, qemu_dns_mac);
+    }
+
+    dhcp_state = DHCP_BOUND;
+    net_send_gratuitous_arp();
+  } else if (dhcp_state == DHCP_REQUEST_SENT && msg_type == 6) { // DHCPNAK
+    cprintf("NET: DHCP NAK received!\n");
+    dhcp_state = DHCP_FAILED;
+  }
+}
+
 // Process incoming packets (batch up to 8 packets per poll)
 static volatile int net_polling = 0;
 void
@@ -439,7 +729,10 @@ net_poll(void)
         continue;
       }
 
-      if (memcmp(ip->dst, my_ip, 4) != 0 && ip->dst[0] != 255) {
+      int is_for_me = (memcmp(ip->dst, my_ip, 4) == 0);
+      int is_bcast  = (ip->dst[0] == 255);
+      int is_dhcp_cand = (dhcp_state != DHCP_BOUND && ip->proto == IPPROTO_UDP);
+      if (!is_for_me && !is_bcast && !is_dhcp_cand) {
         continue;
       }
 
@@ -478,7 +771,7 @@ net_poll(void)
         }
       }
 
-      // UDP (DNS)
+      // UDP
       if (ip->proto == IPPROTO_UDP && payload_len >= (int)sizeof(struct udp_hdr)) {
         struct udp_hdr *udp = (struct udp_hdr*)payload;
         ushort src_port = ntohs(udp->src_port);
@@ -488,6 +781,13 @@ net_poll(void)
         int udata_len = udp_len - sizeof(struct udp_hdr);
         uchar *udata  = payload + sizeof(struct udp_hdr);
 
+        // DHCP (Client port 68, Server port 67)
+        if (dst_port == 68 && src_port == 67) {
+          net_dhcp_input(udata, udata_len, eth->src);
+          continue;
+        }
+
+        // DNS
         if (src_port == 53 && dst_port == 10053 && udata_len >= 12) {
           ushort qid = (udata[0] << 8) | udata[1];
           ushort flags = (udata[2] << 8) | udata[3];
@@ -763,6 +1063,86 @@ net_send_gratuitous_arp(void)
   net_tx(tx_buf, 60);
 }
 
+int
+net_dhcp_acquire(void)
+{
+  if (!CdcEcmIsAttached()) {
+    cprintf("NET: USB network interface not found.\n");
+    return -1;
+  }
+
+  cprintf("NET: Requesting IP lease via DHCP...\n");
+  dhcp_state = DHCP_IDLE;
+  memset(my_ip, 0, 4);
+  memset(gateway_ip, 0, 4);
+  memset(netmask, 0, 4);
+  memset(dns_ip, 0, 4);
+  memset(dhcp_offered_ip, 0, 4);
+  memset(dhcp_server_id, 0, 4);
+  memset(dhcp_netmask, 0, 4);
+  memset(dhcp_gateway, 0, 4);
+  memset(dhcp_dns, 0, 4);
+
+  // Generate unique transaction ID
+  dhcp_xid = net_time_ms() ^ ((uint)my_mac[4] << 8) ^ ((uint)my_mac[5]);
+  if (dhcp_xid == 0) dhcp_xid = 0x3903F326;
+
+  dhcp_state = DHCP_DISCOVER_SENT;
+  dhcp_last_tx = net_time_ms();
+  net_dhcp_send_discover();
+
+  uint start = net_time_ms();
+
+  while (dhcp_state != DHCP_BOUND && dhcp_state != DHCP_FAILED) {
+    uint now = net_time_ms();
+    if (now - start > 3000) {
+      break; // 3-second timeout
+    }
+
+    // Retransmit if packet lost
+    if (dhcp_state == DHCP_DISCOVER_SENT && (now - dhcp_last_tx) > 1000) {
+      dhcp_last_tx = now;
+      net_dhcp_send_discover();
+    } else if (dhcp_state == DHCP_REQUEST_SENT && (now - dhcp_last_tx) > 1000) {
+      dhcp_last_tx = now;
+      net_dhcp_send_request();
+    }
+
+    net_poll();
+    net_yield();
+    for (volatile int d = 0; d < 500; d++);
+  }
+
+  if (dhcp_state == DHCP_BOUND) {
+    cprintf("NET: DHCP lease acquired successfully!\n");
+    cprintf("     IP Address: "); print_ip(my_ip); cprintf("\n");
+    cprintf("     Netmask:    "); print_ip(netmask); cprintf("\n");
+    cprintf("     Gateway:    "); print_ip(gateway_ip); cprintf("\n");
+    cprintf("     DNS Server: "); print_ip(dns_ip); cprintf("\n");
+    return 0;
+  }
+
+  cprintf("NET: DHCP negotiation timed out.\n");
+  cprintf("NET: Falling back to default static configuration.\n");
+  memmove(my_ip, default_ip, 4);
+  memmove(gateway_ip, default_gateway, 4);
+  memmove(netmask, default_netmask, 4);
+  memmove(dns_ip, default_dns, 4);
+
+  static const uchar qemu_gw_mac[6]  = {0x52, 0x55, 0x0a, 0x00, 0x02, 0x02};
+  static const uchar qemu_dns_mac[6] = {0x52, 0x55, 0x0a, 0x00, 0x02, 0x03};
+  arp_table_update(gateway_ip, qemu_gw_mac);
+  arp_table_update(dns_ip, qemu_dns_mac);
+
+  net_send_gratuitous_arp();
+
+  cprintf("     IP Address: "); print_ip(my_ip); cprintf("\n");
+  cprintf("     Netmask:    "); print_ip(netmask); cprintf("\n");
+  cprintf("     Gateway:    "); print_ip(gateway_ip); cprintf("\n");
+  cprintf("     DNS Server: "); print_ip(dns_ip); cprintf("\n");
+  return -1;
+}
+
 void
 net_init(void)
 {
@@ -772,25 +1152,11 @@ net_init(void)
   }
   CdcEcmGetMac(my_mac);
 
-  // Pre-seed Gateway and DNS Server in ARP table (QEMU virtual router and DNS proxy)
-  static const uchar qemu_gw_mac[6]  = {0x52, 0x55, 0x0a, 0x00, 0x02, 0x02};
-  static const uchar qemu_dns_mac[6] = {0x52, 0x55, 0x0a, 0x00, 0x02, 0x03};
-  arp_table_update(gateway_ip, qemu_gw_mac);
-  arp_table_update(dns_ip, qemu_dns_mac);
+  cprintf("NET: USB network interface active (MAC: ");
+  print_mac(my_mac);
+  cprintf(")\n");
 
-  net_send_gratuitous_arp();
-
-  cprintf("NET: TCP/IP Stack initialized:\n");
-  cprintf("     IP Address: "); print_ip(my_ip); cprintf("\n");
-  cprintf("     Netmask:    "); print_ip(netmask); cprintf("\n");
-  cprintf("     Gateway:    "); print_ip(gateway_ip); cprintf("\n");
-  cprintf("     DNS Server: "); print_ip(dns_ip); cprintf("\n");
-  cprintf("     Hardware:   "); print_mac(my_mac); cprintf("\n");
-
-  // Diagnostic tests can be run on demand from userland (ping, fetch)
-  // net_ping_test();
-  // net_dns_test();
-  // net_http_test();
+  net_dhcp_acquire();
 }
 
 int

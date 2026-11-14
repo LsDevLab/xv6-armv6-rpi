@@ -523,3 +523,9 @@ sys_ping(void)
 
   return net_ping((const uchar*)ip_ptr, seq, 20);
 }
+
+int
+sys_dhcp(void)
+{
+  return net_dhcp_acquire();
+}

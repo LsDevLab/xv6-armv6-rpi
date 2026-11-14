@@ -136,6 +136,7 @@ ushort tcp_checksum(const uchar src_ip[4], const uchar dst_ip[4], const void *tc
 int  net_arp_resolve(const uchar ip[4], uchar mac[6]);
 int  net_ip_send(const uchar dst_ip[4], uchar proto, const void *payload, int len);
 int  net_udp_send(const uchar dst_ip[4], ushort src_port, ushort dst_port, const void *payload, int len);
+int  net_dhcp_acquire(void);
 int  net_dns_resolve(const char *hostname, uchar resolved_ip[4]);
 int  net_ping(const uchar dst_ip[4], int seq, int timeout_ticks);
 int  net_ping_test(void);

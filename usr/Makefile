@@ -25,6 +25,7 @@ UPROGS=\
 	_mousetest\
 	_ping\
 	_fetch\
+	_dhcp\
 
 	#_usertests
 

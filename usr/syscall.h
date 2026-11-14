@@ -25,3 +25,4 @@
 #define SYS_connect 24
 #define SYS_dns     25
 #define SYS_ping    26
+#define SYS_dhcp    27
