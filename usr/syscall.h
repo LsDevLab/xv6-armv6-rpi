@@ -21,3 +21,7 @@
 #define SYS_mkdir  20
 #define SYS_close  21
 #define SYS_fcntl  22
+#define SYS_socket  23
+#define SYS_connect 24
+#define SYS_dns     25
+#define SYS_ping    26

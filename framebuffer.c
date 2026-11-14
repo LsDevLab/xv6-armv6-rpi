@@ -34,6 +34,7 @@ static struct {
 } cons;
 
 static int panicked = 0;
+static int fb_graphics_mode = 0;
 
 void setgpucolour(u16 c)
 {
@@ -258,6 +259,9 @@ void gpuputc(uint c) {
 //static void
 // introduced visual backspaces (so that drawcursor() is no more needed)
 void gpuputcolored(uint c, u16 color) {
+  if (fb_graphics_mode && !panicked)
+    return;
+
   if(c == '\n') {
     cursor_x = 0;
     cursor_y += fontheight;
@@ -330,6 +334,7 @@ fbwrite(struct inode *ip, char *userbuf, int n)
 {
     int off = 0;
     acquire(&cons.lock);
+    fb_graphics_mode = 1;
 
     while(n >= sizeof(fb_pixel_t)) {
         fb_pixel_t pix;

@@ -42,7 +42,10 @@ KERNEL_SRC = bio.c console.c exception.c exec.c file.c fs.c kalloc.c \
 
 KERN_OBJS = $(patsubst %.c,%.o,$(KERNEL_SRC)) entry.o keyboard.o
 
-libcsud.a:
+.PHONY: csud_driver
+libcsud.a: csud_driver
+
+csud_driver:
 	make -C csud driver CONFIG=FINAL TYPE=LOWLEVEL TARGET=RPI GNU=arm-none-eabi-
 	cp -f csud/libcsud.a .
 
@@ -67,7 +70,7 @@ qemu: kernel.elf
 	@echo "  1. MOUSE IN QEMU WINDOW: Move your physical mouse and click!"
 	@echo "  2. ARROW KEYS IN TERMINAL: Up/Down/Left/Right moves cursor!"
 	@echo "  3. [Home] / [End]: Click / Drag window."
-	@echo "  4. Press [1] or [2] (or Tab) to switch terminal window focus."
+	@echo "  4. Press [Tab] (or click with mouse) to switch terminal window focus."
 	@echo "  5. Press Ctrl-A then X in your terminal to quit QEMU."
 	@echo "==================================================================\n"
 	$(QEMU) -M raspi0 -kernel kernel.elf -usb -device usb-mouse -device usb-kbd -netdev user,id=net0 -device usb-net,netdev=net0 -serial null -serial mon:stdio

@@ -79,6 +79,9 @@ fileclose(struct file *f)
     iput(ff.ip);
     commit_trans();
   }
+  else if(ff.type == FD_SOCKET){
+    net_tcp_close(ff.sock);
+  }
 }
 
 // Get metadata about file f.
@@ -104,6 +107,8 @@ fileread(struct file *f, char *addr, int n)
     return -1;
   if(f->type == FD_PIPE)
     return piperead(f->pipe, addr, n, f->nonblock);
+  if(f->type == FD_SOCKET)
+    return net_tcp_recv(f->sock, addr, n, f->nonblock);
   if(f->type == FD_INODE){
     ilock(f->ip);
     if(f->ip->type == T_DEV){
@@ -135,6 +140,8 @@ filewrite(struct file *f, char *addr, int n)
     return -1;
   if(f->type == FD_PIPE)
     return pipewrite(f->pipe, addr, n, f->nonblock);
+  if(f->type == FD_SOCKET)
+    return net_tcp_send(f->sock, addr, n);
   if(f->type == FD_INODE){
     // write a few blocks at a time to avoid exceeding
     // the maximum log transaction size, including

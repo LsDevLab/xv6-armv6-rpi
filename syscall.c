@@ -107,6 +107,10 @@ extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
 extern int sys_fcntl(void);
+extern int sys_socket(void);
+extern int sys_connect(void);
+extern int sys_dns(void);
+extern int sys_ping(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -131,6 +135,10 @@ static int (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_fcntl]   sys_fcntl,
+[SYS_socket]  sys_socket,
+[SYS_connect] sys_connect,
+[SYS_dns]     sys_dns,
+[SYS_ping]    sys_ping,
 };
 
 void

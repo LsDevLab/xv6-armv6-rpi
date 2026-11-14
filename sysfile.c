@@ -456,3 +456,70 @@ sys_fcntl(void)
   }
   return -1;
 }
+
+int
+sys_socket(void)
+{
+  struct file *f;
+  int fd;
+  int sock_id;
+
+  sock_id = net_tcp_socket();
+  if (sock_id < 0)
+    return -1;
+
+  if ((f = filealloc()) == 0) {
+    net_tcp_close(sock_id);
+    return -1;
+  }
+  if ((fd = fdalloc(f)) < 0) {
+    f->ref = 0;
+    net_tcp_close(sock_id);
+    return -1;
+  }
+
+  f->type = FD_SOCKET;
+  f->readable = 1;
+  f->writable = 1;
+  f->sock = sock_id;
+  return fd;
+}
+
+int
+sys_connect(void)
+{
+  struct file *f;
+  char *ip_ptr;
+  int port;
+
+  if (argfd(0, 0, &f) < 0 || argptr(1, &ip_ptr, 4) < 0 || argint(2, &port) < 0)
+    return -1;
+  if (f->type != FD_SOCKET)
+    return -1;
+
+  return net_tcp_connect(f->sock, (const uchar*)ip_ptr, (ushort)port);
+}
+
+int
+sys_dns(void)
+{
+  char *hostname;
+  char *ip_out;
+
+  if (argstr(0, &hostname) < 0 || argptr(1, &ip_out, 4) < 0)
+    return -1;
+
+  return net_dns_resolve(hostname, (uchar*)ip_out);
+}
+
+int
+sys_ping(void)
+{
+  char *ip_ptr;
+  int seq;
+
+  if (argptr(0, &ip_ptr, 4) < 0 || argint(1, &seq) < 0)
+    return -1;
+
+  return net_ping((const uchar*)ip_ptr, seq, 20);
+}

@@ -75,7 +75,7 @@ delay(uint m)
 	if(m == 0) return;
 
 	t = getsystemtime() + m;
-	while(t != getsystemtime());
+	while(getsystemtime() < t);
 
 	return;
 }

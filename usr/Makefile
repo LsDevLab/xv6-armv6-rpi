@@ -23,6 +23,8 @@ UPROGS=\
 	_zombie\
 	_wm\
 	_mousetest\
+	_ping\
+	_fetch\
 
 	#_usertests
 

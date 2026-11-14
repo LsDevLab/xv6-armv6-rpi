@@ -23,6 +23,10 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int fcntl(int, int, ...);
+int socket(void);
+int connect(int fd, const uchar ip[4], int port);
+int dns(const char *hostname, uchar ip[4]);
+int ping(const uchar ip[4], int seq);
 
 // ulib.c
 int stat(char*, struct stat*);

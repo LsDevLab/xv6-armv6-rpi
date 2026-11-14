@@ -260,7 +260,15 @@ void net_init(void);
 int  net_is_up(void);
 int  net_tx(const void *buf, int len);
 int  net_rx(void *buf, int max_len);
+void net_poll(void);
 int  net_arp_test(void);
+int  net_ping(const uchar dst_ip[4], int seq, int timeout_ticks);
+int  net_dns_resolve(const char *hostname, uchar resolved_ip[4]);
+int  net_tcp_socket(void);
+int  net_tcp_connect(int sock_id, const uchar dst_ip[4], ushort dst_port);
+int  net_tcp_send(int sock_id, const void *data, int len);
+int  net_tcp_recv(int sock_id, void *buf, int max_len, int nonblock);
+int  net_tcp_close(int sock_id);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

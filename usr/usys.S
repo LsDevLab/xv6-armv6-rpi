@@ -364,6 +364,70 @@ fcntl:
     pop {lr}
     bx lr
 
+.globl socket
+socket:
+    push {lr}
+    push {r3}
+    push {r2}
+    push {r1}
+    push {r0}
+    mov r0, #SYS_socket
+    swi #T_SYSCALL
+    pop {r1}
+    pop {r1}
+    pop {r2}
+    pop {r3}
+    pop {lr}
+    bx lr
+
+.globl connect
+connect:
+    push {lr}
+    push {r3}
+    push {r2}
+    push {r1}
+    push {r0}
+    mov r0, #SYS_connect
+    swi #T_SYSCALL
+    pop {r1}
+    pop {r1}
+    pop {r2}
+    pop {r3}
+    pop {lr}
+    bx lr
+
+.globl dns
+dns:
+    push {lr}
+    push {r3}
+    push {r2}
+    push {r1}
+    push {r0}
+    mov r0, #SYS_dns
+    swi #T_SYSCALL
+    pop {r1}
+    pop {r1}
+    pop {r2}
+    pop {r3}
+    pop {lr}
+    bx lr
+
+.globl ping
+ping:
+    push {lr}
+    push {r3}
+    push {r2}
+    push {r1}
+    push {r0}
+    mov r0, #SYS_ping
+    swi #T_SYSCALL
+    pop {r1}
+    pop {r1}
+    pop {r2}
+    pop {r3}
+    pop {lr}
+    bx lr
+
 
 /*
 SYSCALL(fork)

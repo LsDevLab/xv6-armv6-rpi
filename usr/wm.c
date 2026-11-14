@@ -377,7 +377,7 @@ void draw_taskbar(int fb_fd, int active_win_id, const char *status)
         btn.color = (active_win_id == 0) ? COLOR_TITLE_ACTIVE : 0x7BEF;
         btn.ch = 0; btn.buffer = 0; btn.stride = 0; btn.sx = 0; btn.sy = 0;
         write(fb_fd, &btn, sizeof(btn));
-        fb_draw_string(fb_fd, 185, TASKBAR_Y + 8, (active_win_id == 0) ? "* [1] Term 1 *" : "  [1] Term 1  ", (active_win_id == 0) ? 0xFFFF : 0x0000);
+        fb_draw_string(fb_fd, 185, TASKBAR_Y + 8, (active_win_id == 0) ? "* Term 1 *" : "  Term 1  ", (active_win_id == 0) ? 0xFFFF : 0x0000);
     }
 
     if(has_win1){
@@ -386,7 +386,7 @@ void draw_taskbar(int fb_fd, int active_win_id, const char *status)
         btn.color = (active_win_id == 1) ? COLOR_TITLE_ACTIVE : 0x7BEF;
         btn.ch = 0; btn.buffer = 0; btn.stride = 0; btn.sx = 0; btn.sy = 0;
         write(fb_fd, &btn, sizeof(btn));
-        fb_draw_string(fb_fd, 330, TASKBAR_Y + 8, (active_win_id == 1) ? "* [2] Term 2 *" : "  [2] Term 2  ", (active_win_id == 1) ? 0xFFFF : 0x0000);
+        fb_draw_string(fb_fd, 330, TASKBAR_Y + 8, (active_win_id == 1) ? "* Term 2 *" : "  Term 2  ", (active_win_id == 1) ? 0xFFFF : 0x0000);
     }
 
     /* Live status indicator */
@@ -1012,20 +1012,10 @@ int main(void)
                 }
             }
 
-            /* 4. Switch focus hotkeys: Tab, '1', '2' */
+            /* 4. Switch focus hotkey: Tab */
             if(c == '\t'){
                 focus_next_window();
                 refresh_screen(fb_fd, "Key: Tab -> Switched Focus");
-                continue;
-            }
-            if(c == '1'){
-                focus_by_id(0);
-                refresh_screen(fb_fd, "Key: '1' -> Focused Terminal 1");
-                continue;
-            }
-            if(c == '2'){
-                focus_by_id(1);
-                refresh_screen(fb_fd, "Key: '2' -> Focused Terminal 2");
                 continue;
             }
 
@@ -1063,13 +1053,16 @@ int main(void)
 
         /* C. Read output from child processes */
         for(int i = 0; i < num_windows; i++){
-            char buf[64];
-            int n = read(windows[i].stdout_pipe[0], buf, sizeof(buf));
-            if(n > 0){
+            char buf[128];
+            int n;
+            int window_updated = 0;
+            while((n = read(windows[i].stdout_pipe[0], buf, sizeof(buf))) > 0){
                 activity = 1;
+                window_updated = 1;
                 for(int j = 0; j < n; j++)
                     window_put_char(&windows[i], buf[j]);
-
+            }
+            if(window_updated){
                 mouse_restore(fb_fd);
                 blit_window_rects(fb_fd, i);
                 mouse_render(fb_fd, mouse_x, mouse_y);
